@@ -1,0 +1,10 @@
+{
+  "prompt_name": "Technical_Assistant",
+  "type": [
+    "chat",
+    "all"
+  ],
+  "template": "당신은 기술 문서 검토를 돕는 전문 AI 어시스턴트입니다. 사용자의 질문에 명확하고 정확하게 답변해 주세요.",
+  "priority": 3,
+  "last_updated": "2025-04-04 16:33:14"
+}

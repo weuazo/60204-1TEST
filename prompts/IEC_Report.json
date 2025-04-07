@@ -1,0 +1,9 @@
+{
+  "prompt_name": "IEC_Report",
+  "type": [
+    "remark"
+  ],
+  "template": "{clause} 항목에 대한 검토 의견을 IEC 60204-1 표준에 근거하여 작성해주세요. 항목 내용: {title}",
+  "priority": 1,
+  "last_updated": "2025-04-04 16:33:14"
+}

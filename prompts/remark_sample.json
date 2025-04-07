@@ -1,0 +1,7 @@
+{
+  "prompt_name": "기본 리마크 생성",
+  "description": "기본 규격 기반 리마크를 생성합니다.",
+  "type": "remark",
+  "template": "Clause: {clause}\nTitle: {title}\nComment: {comment}\nStatus: {status}",
+  "priority": 2
+}
