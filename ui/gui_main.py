@@ -1,12 +1,13 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, scrolledtext
 import webbrowser
 import os
 import sys
+import traceback
 
 # UI 유틸리티 임포트 (순환 참조 피하기)
 from ui.ui_utils import (
-    set_root, log_message, show_api_key_dialog, update_all_prompt_statuses, update_api_status,
+    set_root, set_log_box, log_message, show_api_key_dialog, update_all_prompt_statuses, update_api_status,
     PRIMARY_COLOR, SECONDARY_COLOR, BG_COLOR, CARD_COLOR, TEXT_COLOR, 
     SUCCESS_COLOR, WARNING_COLOR, ERROR_COLOR, BORDER_COLOR, HOVER_COLOR
 )
@@ -15,201 +16,405 @@ from ui.ui_utils import (
 root = None
 notebook = None
 
-def create_gui():
-    global root, notebook
-    
-    # 메인 창 설정
-    root = tk.Tk()
-    root.title("Gemini 보고서 자동 생성기")
-    root.geometry("1200x800")
-    root.configure(bg=BG_COLOR)
-    
-    # ui_utils.py의 root 참조 설정
-    set_root(root)
-    
-    # 아이콘 설정 (윈도우)
-    try:
-        if os.path.exists("assets/icon.ico"):
-            root.iconbitmap("assets/icon.ico")
-    except Exception as e:
-        print(f"아이콘 설정 실패: {e}")
-        
-    # 스타일 설정
-    style = ttk.Style()
-    style.theme_use("clam")  # 테마 설정
-    
-    # 프레임 스타일
-    style.configure("TFrame", background=BG_COLOR)
-    style.configure("Card.TFrame", background=CARD_COLOR, relief="flat")
-    
-    # 레이블 스타일
-    style.configure("TLabel", background=BG_COLOR, foreground=TEXT_COLOR, font=("Arial", 10))
-    style.configure("Title.TLabel", font=("Arial", 14, "bold"), foreground=PRIMARY_COLOR)
-    style.configure("Subtitle.TLabel", font=("Arial", 12, "bold"))
-    style.configure("Success.TLabel", foreground=SUCCESS_COLOR)
-    style.configure("Warning.TLabel", foreground=WARNING_COLOR)
-    style.configure("Error.TLabel", foreground=ERROR_COLOR)
-    
-    # 버튼 스타일
-    style.configure("TButton", font=("Arial", 10), padding=5)
-    style.configure("Primary.TButton", background=PRIMARY_COLOR, foreground="white")
-    style.map("Primary.TButton", background=[("active", SECONDARY_COLOR)])
-    style.configure("Action.TButton", font=("Arial", 12, "bold"), padding=10)
-    
-    # 탭 스타일
-    style.configure("TNotebook", background=BG_COLOR, tabmargins=[0, 0, 0, 0])
-    style.configure("TNotebook.Tab", background=BG_COLOR, padding=[15, 5], font=("Arial", 10))
-    style.map("TNotebook.Tab", 
-              background=[("selected", PRIMARY_COLOR), ("active", HOVER_COLOR)],
-              foreground=[("selected", "#ffffff"), ("active", TEXT_COLOR)])
+# 콜백 시스템 추가 (새로 추가)
+callback_registry = {}
 
-    # 헤더 프레임
-    header_frame = tk.Frame(root, bg=PRIMARY_COLOR, height=70)
-    header_frame.pack(fill=tk.X)
+def register_callback(name, callback_fn):
+    """콜백 함수 등록 (새로 추가)"""
+    global callback_registry
+    callback_registry[name] = callback_fn
+    log_message(f"콜백 등록됨: {name}", "debug")
+
+def trigger_callback(name, *args, **kwargs):
+    """등록된 콜백 함수 호출 (새로 추가)"""
+    global callback_registry
+    if name in callback_registry:
+        try:
+            return callback_registry[name](*args, **kwargs)
+        except Exception as e:
+            log_message(f"콜백 실행 중 오류 ({name}): {e}", "error")
+            return None
+    return None
+
+def on_close():
+    """애플리케이션 종료 처리"""
+    global root
+    if messagebox.askokcancel("종료 확인", "프로그램을 종료하시겠습니까?"):
+        log_message("프로그램 종료 중...", "info")
+        if root:
+            root.destroy()
+
+def apply_theme():
+    """스타일 테마 적용"""
+    style = ttk.Style()
     
-    # 앱 타이틀
-    title_label = tk.Label(
-        header_frame, 
-        text="Gemini 보고서 자동 생성기", 
-        font=("Arial", 18, "bold"), 
-        bg=PRIMARY_COLOR,
-        fg="white"
+    # 스타일 초기화 - 기본 테마 적용 후 커스텀 설정
+    style.theme_use('default')
+    
+    # 기본 색상 및 폰트 설정
+    style.configure(".", font=("Arial", 10))
+    style.configure("TFrame", background=BG_COLOR)
+    style.configure("TLabel", background=BG_COLOR, foreground=TEXT_COLOR)
+    
+    # 기본 버튼 스타일 - 가시성 향상을 위해 개선
+    style.configure("TButton", 
+                   background="#1976D2", 
+                   foreground="white", 
+                   relief="raised",
+                   borderwidth=2,  
+                   padding=(10, 5),
+                   font=("Arial", 10))
+    
+    # 호버 및 누름 효과 강화 - 플랫폼 간 호환성 강화
+    style.map("TButton",
+        background=[("active", "#2196F3"), ("pressed", "#0D47A1"), ("focus", "#2196F3")],
+        foreground=[("active", "white"), ("pressed", "white"), ("disabled", "#888888")],
+        relief=[("pressed", "sunken")]
     )
-    title_label.pack(side=tk.LEFT, padx=20, pady=15)
+    
+    # Tkinter 기본 버튼을 위한 스타일도 설정
+    root.option_add('*Button.background', '#1976D2')
+    root.option_add('*Button.foreground', 'white')
+    root.option_add('*Button.relief', 'raised')
+    root.option_add('*Button.borderWidth', 2)
+    root.option_add('*Button.padX', 10)
+    root.option_add('*Button.padY', 5)
+    root.option_add('*Button.font', ('Arial', 10))
+    
+    # 타이틀 레이블 스타일
+    style.configure("Title.TLabel", font=("Arial", 14, "bold"), foreground=PRIMARY_COLOR)
+    style.configure("Subtitle.TLabel", font=("Arial", 12, "bold"), foreground=PRIMARY_COLOR)
+    
+    # 카드 스타일
+    style.configure("Card.TFrame", background=CARD_COLOR, relief="solid", borderwidth=1)
+    
+    # 프로그레스바 색상 - 명시적 색상 정의 강화
+    style.configure("TProgressbar", 
+                   background=PRIMARY_COLOR, 
+                   troughcolor=BG_COLOR,
+                   bordercolor=BORDER_COLOR,
+                   lightcolor=PRIMARY_COLOR,
+                   darkcolor=SECONDARY_COLOR)
+    
+    # 특별한 액션 버튼 스타일 - 더 눈에 띄는 색상으로 개선
+    style.configure("Action.TButton", 
+                   background="#FF5722",
+                   foreground="white", 
+                   relief="raised",
+                   borderwidth=2,
+                   padding=(10, 5),
+                   font=("Arial", 10, "bold"))
+    
+    style.map("Action.TButton",
+        background=[("active", "#FF7043"), ("pressed", "#E64A19"), ("focus", "#FF7043")],
+        foreground=[("active", "white"), ("pressed", "white"), ("disabled", "#888888")]
+    )
+    
+    # 파일 찾아보기 버튼을 위한 특별 스타일 (눈에 더 잘 띔)
+    style.configure("Browse.TButton", 
+                   background="#009688",
+                   foreground="white", 
+                   relief="ridge",
+                   borderwidth=2,
+                   padding=(10, 5),
+                   font=("Arial", 10))
+    
+    style.map("Browse.TButton",
+        background=[("active", "#4DB6AC"), ("pressed", "#00796B"), ("focus", "#4DB6AC")],
+        foreground=[("active", "white"), ("pressed", "white"), ("disabled", "#888888")]
+    )
+    
+    # 강조 버튼 스타일 (결과 생성 같은 주요 액션용)
+    style.configure("Primary.TButton", 
+                   background="#4CAF50",
+                   foreground="white", 
+                   relief="raised",
+                   borderwidth=2,
+                   padding=(10, 5),
+                   font=("Arial", 11, "bold"))
+    
+    style.map("Primary.TButton",
+        background=[("active", "#66BB6A"), ("pressed", "#2E7D32"), ("focus", "#66BB6A")],
+        foreground=[("active", "white"), ("pressed", "white"), ("disabled", "#888888")]
+    )
+    
+    # 노트북(탭) 스타일
+    style.configure("TNotebook", background=BG_COLOR)
+    style.configure("TNotebook.Tab", padding=[10, 5], font=("Arial", 10))
+    style.map("TNotebook.Tab",
+        background=[("selected", CARD_COLOR), ("active", HOVER_COLOR)],
+        foreground=[("selected", PRIMARY_COLOR), ("active", TEXT_COLOR)]
+    )
+    
+    # 콤보박스 및 체크버튼 스타일
+    style.configure("TCombobox", padding=5)
+    style.configure("TCheckbutton", background=BG_COLOR)
+    
+    # 구분선
+    style.configure("TSeparator", background=BORDER_COLOR)
+    
+    # 라벨프레임
+    style.configure("TLabelframe", background=BG_COLOR)
+    style.configure("TLabelframe.Label", background=BG_COLOR, foreground=PRIMARY_COLOR, font=("Arial", 10, "bold"))
+    
+    # 강제 업데이트로 스타일 즉시 적용
+    try:
+        style.theme_use('default')  # 테마를 한 번 더 적용하여 변경사항 강제 적용
+    except Exception as e:
+        print(f"스타일 강제 적용 중 오류: {e}")
+
+def load_data():
+    """초기 데이터 로드 및 설정"""
+    try:
+        # 환경 변수 확인
+        if not os.environ.get("GEMINI_API_KEY"):
+            log_message("API 키가 설정되지 않았습니다.", "warning")
+        
+        # 프롬프트 데이터 로드 확인
+        try:
+            from utils.prompt_loader import count_prompts
+            prompt_count = count_prompts()
+            if (prompt_count > 0):
+                log_message(f"프롬프트 {prompt_count}개를 로드했습니다.", "info")
+            else:
+                log_message("사용 가능한 프롬프트가 없습니다.", "warning")
+        except ImportError:
+            log_message("프롬프트 로더를 가져올 수 없습니다.", "error")
+        
+    except Exception as e:
+        log_message(f"데이터 로드 중 오류 발생: {e}", "error")
+
+def check_api_key():
+    """API 키 설정 여부 확인 및 처리"""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    
+    if not api_key:
+        log_message("API 키가 설정되지 않았습니다. 설정 대화상자를 표시합니다.", "warning")
+        # API 키 설정 대화상자를 1초 후에 표시 (UI가 완전히 로드된 후)
+        if root:
+            root.after(1000, show_api_key_dialog)
+    else:
+        log_message("API 키가 설정되었습니다.", "info")
+        # API 연결 상태 업데이트
+        update_api_status()
+
+def create_main_window():
+    """메인 창 생성"""
+    global root, notebook, log_box, close_window, status_bar
+    
+    # 루트 윈도우 설정
+    root = tk.Tk()
+    root.title("Gemini 보고서 생성기")
+    
+    # 화면 크기 조정: 사용자 화면 크기에 맞게 설정
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    
+    # 화면 크기의 80%로 창 크기 설정 (90%에서 80%로 줄임)
+    window_width = int(screen_width * 0.8)
+    window_height = int(screen_height * 0.8)
+    
+    # 창 위치 계산 (화면 중앙)
+    x = (screen_width - window_width) // 2
+    y = (screen_height - window_height) // 2
+    
+    # 창 크기와 위치 설정
+    root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+    root.minsize(800, 600)  # 최소 창 크기 감소 (1000, 700에서 조정)
+    
+    # 창 닫기 핸들러 등록
+    root.protocol("WM_DELETE_WINDOW", on_close)
+    
+    # 스타일 설정
+    apply_theme()
+    
+    # 헤더 영역 추가 (API 상태 표시 및 설정 버튼)
+    header_frame = ttk.Frame(root)
+    header_frame.pack(fill=tk.X, padx=10, pady=5)
+    
+    # API 키 상태 및 설정 버튼
+    api_frame = ttk.Frame(header_frame)
+    api_frame.pack(side=tk.RIGHT)
     
     # API 상태 표시
-    api_status_text = "API 연결됨 ✓" if os.environ.get("GEMINI_API_KEY") else "API 연결 안됨 ⚠️"
+    api_status_text = "API 연결 안됨 ⚠️"
+    if os.environ.get("GEMINI_API_KEY"):
+        api_status_text = "API 연결됨 ✓"
     
-    api_frame = tk.Frame(header_frame, bg=PRIMARY_COLOR)
-    api_frame.pack(side=tk.RIGHT, padx=20, pady=15)
-    
-    api_status = tk.Label(
+    api_status_label = ttk.Label(
         api_frame, 
-        text=api_status_text, 
-        font=("Arial", 10), 
-        bg=PRIMARY_COLOR,
-        fg="white"
+        text=api_status_text,
+        padding=(5, 0)
     )
-    api_status.pack(side=tk.RIGHT)
+    api_status_label.pack(side=tk.LEFT, padx=5)
     
     # API 키 설정 버튼
-    api_button = tk.Button(
-        api_frame, 
-        text="API 키 설정", 
-        font=("Arial", 10), 
-        bg=SECONDARY_COLOR,
-        fg="white",
-        bd=0,
-        padx=10,
-        pady=3,
-        cursor="hand2",
-        command=show_api_key_dialog
+    api_key_btn = ttk.Button(
+        api_frame,
+        text="API 키 설정",
+        command=show_api_key_dialog,
+        width=12
     )
-    api_button.pack(side=tk.RIGHT, padx=(0, 15))
-
-    # 메뉴 설정 (새로고침 메뉴 추가)
-    menubar = tk.Menu(root)
+    api_key_btn.pack(side=tk.LEFT, padx=5)
     
-    # 파일 메뉴
-    file_menu = tk.Menu(menubar, tearoff=0)
-    file_menu.add_command(label="새로고침", command=refresh_ui, accelerator="F5")
-    file_menu.add_separator()
-    file_menu.add_command(label="종료", command=root.destroy)
-    menubar.add_cascade(label="파일", menu=file_menu)
+    # 메인 프레임 설정
+    main_frame = ttk.Frame(root)
+    main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
     
-    # API 설정 메뉴
-    setting_menu = tk.Menu(menubar, tearoff=0)
-    setting_menu.add_command(label="API 키 설정", command=show_api_key_dialog)
-    menubar.add_cascade(label="설정", menu=setting_menu)
+    # 탭 구성 - 개선된 스타일 적용
+    notebook = ttk.Notebook(main_frame)
+    notebook.pack(fill=tk.BOTH, expand=True)
     
-    root.config(menu=menubar)
+    # 탭 생성 시 스타일 적용
+    style = ttk.Style()
+    style.configure("Active.TFrame", background=BG_COLOR)
+    style.configure("Disabled.TFrame", background="#f0f0f0")
+    style.configure("Tab.TLabel", font=("Arial", 10, "bold"), padding=5)
     
-    # F5 키 바인딩
-    root.bind("<F5>", lambda event: refresh_ui())
-
-    # 메인 내용 영역
-    content_frame = tk.Frame(root, bg=BG_COLOR)
-    content_frame.pack(fill=tk.BOTH, expand=True)
+    # 확장 보고서 생성 탭 (새로운 디자인으로 강화)
+    advanced_tab = ttk.Frame(notebook, style="Active.TFrame")
+    from ui.extended_report_tab import create_extended_report_tab
+    create_extended_report_tab(advanced_tab)
+    notebook.add(advanced_tab, text="✨ 확장 보고서 생성")
     
-    # 탭 인터페이스
-    notebook = ttk.Notebook(content_frame)
+    # 기본 보고서 생성 탭 (기존 기능, 명확하게 비활성화 표시)
+    basic_tab = ttk.Frame(notebook, style="Disabled.TFrame")
+    from ui.report_tab import create_report_tab
+    create_report_tab(basic_tab)
+    notebook.add(basic_tab, text="📄 기본 보고서 (비활성화됨)")
     
-    report_tab = ttk.Frame(notebook, style="TFrame")
-    chat_tab = ttk.Frame(notebook, style="TFrame")
-    prompt_tab = ttk.Frame(notebook, style="TFrame")
-    help_tab = ttk.Frame(notebook, style="TFrame")  # 도움말 탭 추가
+    # AI 채팅 탭
+    chat_tab = ttk.Frame(notebook)
+    from ui.chat_tab import create_chat_tab
+    create_chat_tab(chat_tab)
+    notebook.add(chat_tab, text="💬 AI 채팅")
     
-    notebook.add(report_tab, text=" 📊 보고서 생성 ")
-    notebook.add(chat_tab, text=" 💬 AI 채팅 ")
-    notebook.add(prompt_tab, text=" ✏️ 프롬프트 관리 ")
-    notebook.add(help_tab, text=" ❓ 도움말 ")  # 도움말 탭 추가
-    notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    # 프롬프트 관리 탭
+    prompt_tab = ttk.Frame(notebook)
+    from ui.prompt_tab import build_prompt_tab  # create_prompt_tab에서 build_prompt_tab으로 수정
+    build_prompt_tab(prompt_tab)
+    notebook.add(prompt_tab, text="⚙️ 프롬프트 관리")
     
-    # 푸터 프레임 (상태 표시줄)
-    footer_frame = tk.Frame(root, bg=BORDER_COLOR, height=25)
-    footer_frame.pack(fill=tk.X, side=tk.BOTTOM)
+    # 도움말 탭
+    help_tab = ttk.Frame(notebook)
+    create_help_tab(help_tab)
+    notebook.add(help_tab, text="❓ 도움말")
     
-    status_label = tk.Label(
-        footer_frame, 
-        text="준비 완료", 
-        font=("Arial", 9), 
-        bg=BORDER_COLOR,
-        fg=TEXT_COLOR,
-        anchor="w"
+    # 사용자 피드백을 위한 탭 변경 이벤트 연결
+    notebook.bind("<<NotebookTabChanged>>", on_tab_changed)
+    
+    # 로그 영역 높이 줄이기
+    log_frame = ttk.Frame(main_frame)
+    log_frame.pack(fill=tk.X, pady=5)
+    
+    # 로그 영역
+    log_inner_frame = ttk.LabelFrame(log_frame, text="로그 및 상태 메시지")
+    log_inner_frame.pack(fill=tk.X)
+    
+    log_box = scrolledtext.ScrolledText(
+        log_inner_frame, wrap=tk.WORD, height=3, width=10,  # 높이 4에서 3으로 줄임
+        state="disabled", background="#f8f8f8"
     )
-    status_label.pack(side=tk.LEFT, padx=15, fill=tk.Y)
+    log_box.pack(fill=tk.X, padx=5, pady=5)
+    
+    # Gemini API 키 설정 버튼
+    config_frame = ttk.Frame(main_frame)
+    config_frame.pack(fill=tk.X, pady=5)
+    
+    ttk.Button(
+        config_frame,
+        text="API 키 설정",
+        command=show_api_key_dialog,
+        width=15
+    ).pack(side=tk.LEFT, padx=5)
     
     # 버전 정보
-    try:
-        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from main import VERSION
-    except ImportError:
-        VERSION = "0.1.1"
+    version_label = ttk.Label(config_frame, text="v2.0", foreground="#999999")
+    version_label.pack(side=tk.RIGHT, padx=5)
     
-    version_label = tk.Label(
-        footer_frame, 
-        text=f"v{VERSION}", 
-        font=("Arial", 9), 
-        bg=BORDER_COLOR,
-        fg=TEXT_COLOR,
-        anchor="e"
+    # 상태바
+    status_bar = ttk.Label(
+        root, text="준비됨", relief=tk.SUNKEN, anchor=tk.W, padding=(5, 2)
     )
-    version_label.pack(side=tk.RIGHT, padx=15, fill=tk.Y)
+    status_bar.pack(side=tk.BOTTOM, fill=tk.X)
     
-    # 지연 탭 초기화
-    init_tabs()
+    # 로그 박스 참조 저장
+    set_log_box(log_box)
     
-    # API 상태 업데이트
-    update_api_status()
+    # 루트 참조 저장 (대화 상자 제어용)
+    set_root(root)
     
-    # 프롬프트 상태 업데이트
-    from ui.ui_utils import update_all_prompt_statuses
-    root.after(100, update_all_prompt_statuses)
+    # 초기 데이터 로드
+    load_data()
+    
+    # 시작 로그
+    log_message("프로그램이 시작되었습니다", "info")
+    log_message("확장 보고서 생성 탭이 활성화되었습니다", "info")
+    
+    # 초기 API 키 확인
+    check_api_key()
     
     return root
 
+def on_tab_changed(event):
+    """탭 변경 시 발생하는 이벤트 핸들러"""
+    try:
+        # 현재 선택된 탭 확인
+        current_tab = event.widget.select()
+        tab_index = event.widget.index(current_tab)
+        
+        # 각 탭별로 필요한 처리 (보고서 탭에 대한 특별 처리 삭제)
+        pass
+    except Exception as e:
+        log_message(f"탭 변경 처리 중 오류: {e}", "error")
+
+def check_and_fix_tabs():
+    """탭 초기화 상태를 확인하고 수정"""
+    # 보고서 탭에 대한 특별 처리 삭제
+    pass
+
+def force_recreate_report_tab():
+    """보고서 탭 강제 재생성 (메뉴용)"""
+    try:
+        if notebook and len(notebook.tabs()) > 0:
+            # 첫 번째 탭(보고서 탭) 선택
+            tab_id = notebook.tabs()[0]
+            tab_frame = notebook.nametowidget(tab_id)
+            
+            # 기존 위젯 모두 제거
+            for widget in tab_frame.winfo_children():
+                widget.destroy()
+            
+            # 보고서 탭 재생성
+            from ui.report_tab import create_report_tab
+            create_report_tab(tab_frame)
+            
+            # UI 강제 업데이트
+            root.update_idletasks()
+            
+            log_message("보고서 탭 재생성 완료", "success")
+            messagebox.showinfo("완료", "보고서 탭이 재생성되었습니다.\n(이 기능은 비활성화되었습니다)")
+        else:
+            log_message("노트북 또는 탭을 찾을 수 없음", "error")
+            messagebox.showerror("오류", "탭을 찾을 수 없습니다.")
+    except Exception as e:
+        log_message(f"보고서 탭 강제 재생성 중 오류: {e}", "error")
+        messagebox.showerror("오류", f"보고서 탭 재생성 중 오류가 발생했습니다:\n{str(e)}")
+
+def get_version():
+    """현재 버전 반환"""
+    try:
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from main import VERSION
+        return VERSION
+    except ImportError:
+        return "0.1.5"
+
 def init_tabs():
     """탭 모듈들을 지연 로딩하여 초기화합니다"""
-    global root
+    global root, notebook
     
     try:
-        # 먼저 content_frame과 notebook 찾기
-        content_frame = None
-        notebook = None
-        
-        for widget in root.winfo_children():
-            if isinstance(widget, tk.Frame) and widget.cget("bg") == BG_COLOR:
-                content_frame = widget
-                for child in content_frame.winfo_children():
-                    if isinstance(child, ttk.Notebook):
-                        notebook = child
-                        break
-                break
-        
-        if not content_frame or not notebook:
-            log_message("UI 요소를 찾을 수 없습니다.", "error")
-            return
-            
         # 각 탭 모듈 임포트하고 초기화
         tab_frames = notebook.winfo_children()
         if len(tab_frames) < 3:
@@ -217,11 +422,20 @@ def init_tabs():
             return
             
         try:
-            # 1. 보고서 생성 탭
+            # 1. 보고서 생성 탭 - 간단한 초기화만 수행
+            log_message("보고서 생성 탭 초기화 시작", "info")
             from ui.report_tab import create_report_tab
+            
+            # 기존 위젯들 모두 제거
+            for widget in tab_frames[0].winfo_children():
+                widget.destroy()
+                
+            # 보고서 탭 생성 (비활성화 메시지)
             create_report_tab(tab_frames[0])
+            log_message("보고서 생성 탭 초기화 완료", "info")
         except Exception as e:
             log_message(f"보고서 탭 초기화 오류: {e}", "error")
+            ttk.Label(tab_frames[0], text=f"보고서 탭 기능이 비활성화되었습니다: {e}", foreground=WARNING_COLOR).pack(pady=20)
             
         try:
             # 2. 채팅 탭
@@ -243,8 +457,14 @@ def init_tabs():
         except Exception as e:
             log_message(f"도움말 탭 초기화 오류: {e}", "error")
     
+        # 채팅 탭(두 번째 탭) 강제 선택 및 표시
+        notebook.select(1)
+        root.update_idletasks()
+        log_message("모든 탭 초기화 및 선택 완료", "info")
+    
     except Exception as e:
         log_message(f"탭 초기화 중 오류 발생: {e}", "error")
+        traceback.print_exc()
 
 def refresh_ui():
     """UI 요소들 새로고침"""
@@ -315,6 +535,9 @@ def refresh_ui():
                         rf['refresh_prompt_list'](filter_type)
                         log_message("프롬프트 목록 새로고침 완료", "info")
         
+        # API 상태 업데이트
+        update_api_status()
+        
         # 프롬프트 상태 업데이트 - 마지막에 시도
         update_all_prompt_statuses()
         
@@ -326,6 +549,11 @@ def get_root():
     """현재 설정된 root 윈도우 반환"""
     global root
     return root
+
+def get_notebook():
+    """현재 설정된 notebook 객체 반환"""
+    global notebook
+    return notebook
 
 def create_help_tab(parent):
     """도움말 탭 구성"""
@@ -387,7 +615,7 @@ def create_help_tab(parent):
                          font=("Arial", 10), padx=15, pady=10,
                          highlightthickness=0, relief="flat")
     std_content.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-    
+
     std_content.insert("1.0", """프로그램에서 자동으로 감지하고 지원하는 규격 목록:
 
 1. IEC 60204-1: 기계류의 전기장비
@@ -423,48 +651,28 @@ def create_help_tab(parent):
     version_frame.pack(fill=tk.X, padx=15, pady=15)
     
     try:
-        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from main import VERSION
-    except ImportError:
-        VERSION = "0.1.3"
+        version = get_version()
+    except:
+        version = "0.1.5"
     
-    ttk.Label(version_frame, text=f"Gemini 보고서 자동 생성기 v{VERSION}", 
+    ttk.Label(version_frame, text=f"Gemini 보고서 자동 생성기 v{version}", 
              font=("Arial", 12, "bold")).pack(side=tk.LEFT)
     
     # 연락처 정보
-    ttk.Label(version_frame, text="© 2023", font=("Arial", 9)).pack(side=tk.RIGHT)
-
-    # 탭2: 확장 보고서 생성 (새로 추가)
-    try:
-        from ui.extended_report_tab import create_extended_report_tab
-        ext_report_tab = tk.Frame(notebook, bg=BG_COLOR)
-        create_extended_report_tab(ext_report_tab)
-        notebook.add(ext_report_tab, text="확장 보고서")
-    except Exception as e:
-        print(f"확장 보고서 탭 로딩 오류: {e}")
-        ext_report_tab = tk.Frame(notebook, bg=BG_COLOR)
-        tk.Label(ext_report_tab, text=f"탭 로드 실패: {e}").pack()
-        notebook.add(ext_report_tab, text="확장 보고서")
+    ttk.Label(version_frame, text="© 2023-2025", font=("Arial", 9)).pack(side=tk.RIGHT)
 
 def show_help():
     """도움말 표시"""
-    try:
-        help_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.md")
-        if os.path.exists(help_path):
-            try:
-                webbrowser.open(help_path)
+    if notebook:
+        # 도움말 탭이 존재하는 경우 해당 탭 선택
+        for i, tab_id in enumerate(notebook.tabs()):
+            if i == 3:  # 도움말 탭은 일반적으로 4번째 탭
+                notebook.select(i)
                 return
-            except:
-                pass
-        
-        # 웹 도움말로 대체
-        webbrowser.open("https://github.com/yourusername/gemini-report-generator")
-    except Exception as e:
-        messagebox.showerror("도움말 오류", f"도움말을 열 수 없습니다: {e}")
 
 if __name__ == "__main__":
     try:
-        app = create_gui()
+        app = create_main_window()
         app.mainloop()
     except Exception as e:
         print(f"애플리케이션 초기화 오류: {e}")

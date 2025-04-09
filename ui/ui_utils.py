@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import os
 import sys
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 # UI 테마 및 색상 상수 정의
 PRIMARY_COLOR = "#3498db"
@@ -14,6 +16,21 @@ WARNING_COLOR = "#f39c12"
 ERROR_COLOR = "#e74c3c"
 BORDER_COLOR = "#dcdde1"
 HOVER_COLOR = "#ecf0f1"
+
+# AI 분석 관련 색상 및 스타일 정의
+AI_INDICATOR_HIGH = "#2ecc71"    # 높은 신뢰도 - 녹색
+AI_INDICATOR_MED = "#f39c12"     # 중간 신뢰도 - 주황색
+AI_INDICATOR_LOW = "#e74c3c"     # 낮은 신뢰도 - 빨간색
+AI_INDICATOR_BG = "#eaeaea"      # 배경색
+
+# AI 분석 상태를 위한 색상 상수
+AI_STATUS_COLORS = {
+    "waiting": "#cccccc",  # 대기 중 - 회색
+    "processing": "#3498db",  # 처리 중 - 파란색
+    "detected": "#2ecc71",  # 감지됨 - 녹색
+    "manual": "#e67e22",  # 수동 설정 - 주황색
+    "error": "#e74c3c",  # 오류 - 빨간색
+}
 
 # 전역 변수
 root = None
@@ -46,6 +63,182 @@ def log_message(message, tag=None):
         except tk.TclError:
             # 위젯이 이미 소멸되었거나 유효하지 않은 경우
             pass
+
+def create_indicator_label(parent, text="", tooltip=""):
+    """AI 분석 상태를 표시할 인디케이터 레이블 생성"""
+    frame = ttk.Frame(parent)
+    
+    # 인디케이터 레이블 (동그라미)
+    indicator = tk.Label(frame, text="○", font=("Arial", 16), bg=BG_COLOR)
+    indicator.pack(side=tk.LEFT, padx=(0, 5))
+    
+    # 텍스트 레이블
+    text_label = ttk.Label(frame, text=text)
+    text_label.pack(side=tk.LEFT)
+    
+    # 툴팁 설정
+    if tooltip:
+        create_tooltip(frame, tooltip)
+    
+    # 레이블 상태 업데이트 함수
+    def update_status(status=None, confidence=0, column=""):
+        """
+        인디케이터 상태 업데이트
+        status: 'detected', 'manual', 'none'
+        confidence: 0.0~1.0 범위의 신뢰도 값
+        """
+        if status == 'detected':
+            # 신뢰도에 따른 색상 결정
+            if confidence >= 0.7:
+                color = AI_INDICATOR_HIGH
+                indicator.config(text="●", foreground=color)
+                text_label.config(text=f"{text}: {column} (AI 감지됨, 신뢰도: 높음)")
+            elif confidence >= 0.4:
+                color = AI_INDICATOR_MED
+                indicator.config(text="●", foreground=color)
+                text_label.config(text=f"{text}: {column} (AI 감지됨, 신뢰도: 중간)")
+            else:
+                color = AI_INDICATOR_LOW
+                indicator.config(text="●", foreground=color)
+                text_label.config(text=f"{text}: {column} (AI 감지됨, 신뢰도: 낮음)")
+        elif status == 'manual':
+            # 수동 선택 상태
+            indicator.config(text="●", foreground=PRIMARY_COLOR)
+            text_label.config(text=f"{text}: {column} (수동 선택됨)")
+        else:
+            # 미감지 상태
+            indicator.config(text="○", foreground=TEXT_COLOR)
+            text_label.config(text=f"{text} (감지되지 않음)")
+    
+    # 업데이트 함수를 프레임에 연결하여 외부에서 접근 가능하게 함
+    frame.update_status = update_status
+    
+    return frame
+
+def create_tooltip(widget, text):
+    """위젯에 툴팁 추가"""
+    tooltip_window = None
+    
+    def enter(event=None):
+        nonlocal tooltip_window
+        x, y, _, _ = widget.bbox("insert")
+        x += widget.winfo_rootx() + 25
+        y += widget.winfo_rooty() + 25
+        
+        # 툴팁 창 생성
+        tooltip_window = tk.Toplevel(widget)
+        tooltip_window.wm_overrideredirect(True)
+        tooltip_window.wm_geometry(f"+{x}+{y}")
+        
+        label = tk.Label(tooltip_window, text=text, background="#ffffe0", relief="solid", borderwidth=1, padx=5, pady=2)
+        label.pack()
+    
+    def leave(event=None):
+        nonlocal tooltip_window
+        if tooltip_window:
+            tooltip_window.destroy()
+            tooltip_window = None
+    
+    widget.bind("<Enter>", enter)
+    widget.bind("<Leave>", leave)
+
+def show_progress_dialog(title, message, parent=None):
+    """진행 상태 대화 상자 표시 - 개선된 버전"""
+    global root
+    
+    if parent is None:
+        parent = root
+    
+    if not parent:
+        print("오류: 부모 창이 설정되지 않았습니다.")
+        return None
+    
+    progress_window = tk.Toplevel(parent)
+    progress_window.title(title)
+    progress_window.geometry("400x180")  # 약간 더 높게
+    progress_window.transient(parent)
+    progress_window.grab_set()
+    
+    # 중앙 배치
+    progress_window.update_idletasks()
+    width = progress_window.winfo_width()
+    height = progress_window.winfo_height()
+    x = (parent.winfo_screenwidth() // 2) - (width // 2)
+    y = (parent.winfo_screenheight() // 2) - (height // 2)
+    progress_window.geometry(f'{width}x{height}+{x}+{y}')
+    
+    # 내용 구성 - 시각적으로 개선
+    frame = ttk.Frame(progress_window, padding=20)
+    frame.pack(fill=tk.BOTH, expand=True)
+    
+    # AI 아이콘 추가
+    ai_label = ttk.Label(frame, text="🤖", font=("Arial", 20))
+    ai_label.pack(pady=(0, 10))
+    
+    # 메시지
+    message_label = ttk.Label(
+        frame,
+        text=message,
+        wraplength=350,
+        justify="center",
+        font=("Arial", 10)
+    )
+    message_label.pack(pady=(0, 15))
+    
+    # 진행 바 - 색상 강조
+    style = ttk.Style()
+    style.configure("Colored.TProgressbar", 
+                   background="#3498db",  # 더 밝은 파란색
+                   troughcolor="#f5f5f5",  # 배경색
+                   bordercolor="#2980b9",  # 테두리 색
+                   lightcolor="#3498db",
+                   darkcolor="#2980b9")
+                   
+    progress = ttk.Progressbar(frame, 
+                              mode="indeterminate", 
+                              length=350,
+                              style="Colored.TProgressbar")
+    progress.pack(pady=5)
+    progress.start(10)
+    
+    # 애니메이션 도트 텍스트 추가
+    dots_label = ttk.Label(frame, text="처리 중...")
+    dots_label.pack(pady=(5, 0))
+    
+    # 애니메이션 함수
+    def animate_dots():
+        import time
+        dots = [".", "..", "...", "...."]
+        i = 0
+        while True:
+            try:
+                dots_label.config(text=f"처리 중{dots[i]}")
+                i = (i + 1) % len(dots)
+                progress_window.update()
+                time.sleep(0.5)
+            except:
+                break
+    
+    # 백그라운드 스레드로 애니메이션 실행
+    import threading
+    animation_thread = threading.Thread(target=animate_dots, daemon=True)
+    animation_thread.start()
+    
+    # 업데이트 함수 정의
+    def update_message(new_message):
+        message_label.config(text=new_message)
+        progress_window.update()
+    
+    progress_window.update_message = update_message
+    
+    # 창 닫기 방지
+    def disable_close():
+        pass
+    
+    progress_window.protocol("WM_DELETE_WINDOW", disable_close)
+    
+    # 대화상자 참조 반환
+    return progress_window
 
 def show_api_key_dialog():
     """API 키 설정 다이얼로그"""
@@ -483,3 +676,134 @@ def handle_exception(e, title="오류", message_prefix="작업 중 오류가 발
         print(f"메시지 박스를 표시할 수 없습니다: {error_message}")
     
     return error_message
+
+class AIStatusIndicator(ttk.Frame):
+    """AI 열 분석 상태를 표시하는 시각적 인디케이터"""
+    
+    def __init__(self, parent, name):
+        super().__init__(parent)
+        
+        self.name = name
+        self.status = "waiting"
+        self.confidence = 0
+        self.column = ""
+        
+        # 스타일 정의 강화 - 명시적 스타일 적용
+        style = ttk.Style()
+        style.configure("AI.TFrame", background=BG_COLOR)
+        style.configure("AI.TLabel", background=BG_COLOR, foreground=TEXT_COLOR)
+        
+        # 상태 프레임
+        self.status_frame = ttk.Frame(self, style="AI.TFrame")
+        self.status_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # 상태 아이콘
+        self.icon_canvas = tk.Canvas(self.status_frame, width=16, height=16, bd=0, 
+                                   highlightthickness=0, background=BG_COLOR)
+        self.icon_canvas.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 상태 텍스트
+        self.status_label = ttk.Label(self.status_frame, text=f"{self.name}: 대기 중...", style="AI.TLabel")
+        self.status_label.pack(side=tk.LEFT, fill=tk.X)
+        
+        # 초기 상태 표시
+        self._draw_status_icon()
+        
+    def update_status(self, status, confidence=0, column=""):
+        """상태 및 신뢰도 업데이트"""
+        self.status = status
+        self.confidence = confidence
+        self.column = column
+        
+        # 상태별 텍스트 업데이트
+        text = f"{self.name}: "
+        if status == "waiting":
+            text += "대기 중..."
+        elif status == "processing":
+            text += "분석 중..."
+        elif status == "detected":
+            text += f"감지됨 ({column}) - 신뢰도: {confidence:.1f}%"
+        elif status == "manual":
+            text += f"수동 설정됨 ({column})"
+        elif status == "error":
+            text += "오류 발생"
+            
+        self.status_label.config(text=text)
+        self._draw_status_icon()
+        
+    def _draw_status_icon(self):
+        """상태에 따른 아이콘 그리기"""
+        self.icon_canvas.delete("all")
+        
+        # 상태별 색상 
+        color = AI_STATUS_COLORS.get(self.status, "#cccccc")
+        
+        # 원형 아이콘 그리기
+        self.icon_canvas.create_oval(1, 1, 15, 15, fill=color, outline="")
+
+class ColumnConfidenceBar(ttk.Frame):
+    """신뢰도 막대를 시각화하는 컴포넌트"""
+    
+    def __init__(self, parent, name, confidence=0):
+        super().__init__(parent)
+        
+        self.name = name
+        self.confidence = confidence
+        
+        # 스타일 정의 강화
+        style = ttk.Style()
+        style.configure("Confidence.TFrame", background=BG_COLOR)
+        style.configure("Confidence.TLabel", background=BG_COLOR, foreground=TEXT_COLOR)
+        
+        # 레이블 프레임
+        self.label_frame = ttk.Frame(self, style="Confidence.TFrame")
+        self.label_frame.pack(side=tk.TOP, fill=tk.X, expand=True)
+        
+        # 신뢰도 레이블
+        self.label = ttk.Label(self.label_frame, text=f"{self.name}: {self.confidence:.1f}%", style="Confidence.TLabel")
+        self.label.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 신뢰도 바 캔버스 - 명시적 배경색 설정
+        self.canvas = tk.Canvas(self, width=200, height=15, bd=0, highlightthickness=0, bg=BG_COLOR)
+        self.canvas.pack(side=tk.TOP, fill=tk.X, expand=True, pady=(2, 0))
+        
+        # 초기 신뢰도 바 그리기
+        self._draw_confidence_bar()
+        
+    def update_confidence(self, confidence):
+        """신뢰도 값 업데이트"""
+        self.confidence = confidence
+        self.label.config(text=f"{self.name}: {self.confidence:.1f}%")
+        self._draw_confidence_bar()
+        
+    def _draw_confidence_bar(self):
+        """신뢰도 시각화 막대 그리기"""
+        self.canvas.delete("all")
+        
+        # 배경 그리기 - 더 명확한 대비를 위해 색상 조정
+        self.canvas.create_rectangle(0, 0, 200, 15, fill="#dddddd", outline="#aaaaaa")
+        
+        # 신뢰도 막대 그리기
+        width = max(1, int(200 * (self.confidence / 100)))  # 최소 1픽셀 보장
+        
+        # 신뢰도 단계별 색상 - 더 선명한 색상 사용
+        if self.confidence >= 80:
+            color = "#1abc9c"  # 더 선명한 녹색
+            outline = "#16a085"  # 외곽선
+        elif self.confidence >= 50:
+            color = "#f39c12"  # 주황색
+            outline = "#d35400"  # 외곽선
+        else:
+            color = "#e74c3c"  # 빨간색
+            outline = "#c0392b"  # 외곽선
+            
+        self.canvas.create_rectangle(0, 0, width, 15, fill=color, outline=outline)
+
+# 헬퍼 함수들은 유지
+def create_ai_status_indicator(parent, name):
+    """AI 상태 인디케이터 생성 헬퍼 함수"""
+    return AIStatusIndicator(parent, name)
+
+def create_column_confidence_display(parent, column_type="항목", confidence=0):
+    """열 인식 신뢰도를 시각적으로 표시합니다."""
+    return ColumnConfidenceBar(parent, column_type, confidence)

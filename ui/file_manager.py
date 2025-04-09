@@ -40,7 +40,8 @@ class FileSelector:
         self.browse_btn = ttk.Button(
             self.file_frame, 
             text="찾아보기", 
-            command=self.browse_file
+            command=self.browse_file,
+            style="Browse.TButton"  # 가시성을 높이기 위해 찾아보기 전용 스타일 적용
         )
         self.browse_btn.pack(side=tk.LEFT, padx=5)
         

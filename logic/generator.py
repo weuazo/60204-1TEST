@@ -5,6 +5,7 @@ from datetime import datetime
 from api.gemini import call_gemini_with_prompts
 from utils.prompt_loader import load_prompts_by_type
 from utils.standard_detector import detect_standard_from_file, get_standard_info
+from utils.common_utils import save_result_file
 
 def generate_remarks(base_path, review_path, sheet_name, clause_col, title_col, remark_col, prompt_names,
                    matching_mode="ai", standard_id=None):  # standard_id 매개변수 추가
@@ -290,15 +291,6 @@ def validate_and_filter_prompts(prompt_names):
         raise ValueError(f"선택한 프롬프트를 찾을 수 없습니다: {prompt_names}")
     
     return selected_prompts
-
-def save_result_file(df):
-    """결과 파일 저장"""
-    os.makedirs("output", exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = os.path.join("output", f"report_{timestamp}.xlsx")
-    df.to_excel(output_path, index=False)
-    
-    return output_path
 
 # 이전 processor.py에서 사용하던 함수를 여기로 통합
 def load_prompt_by_name(name):

@@ -1,54 +1,42 @@
-import argparse
+import tkinter as tk
+import os
 import sys
 import traceback
+import argparse
 import datetime
-import os
 
-# 버전 상수
-VERSION = "0.1.3"  # 버전 업데이트
+# 버전 정보
+VERSION = "0.1.5"
 
 def setup_environment():
-    """환경 초기화"""
-    # 필요한 디렉토리 생성
+    """전역 변수환경 초기화"""
+    # 필수 디렉토리 생성
     os.makedirs("output", exist_ok=True)
     os.makedirs("prompts", exist_ok=True)
+    os.makedirs("data", exist_ok=True)  # AI 엑셀 분석기의 학습 데이터 저장 디렉토리
     
     # 기본 프롬프트 파일 생성
-    create_default_prompts_if_needed()
-
-def create_default_prompts_if_needed():
-    """기본 프롬프트 파일 생성"""
-    import json
-    
-    default_prompts = [
-        {
-            "prompt_name": "IEC_Report",
-            "type": ["remark"],
-            "template": "{clause} 항목에 대한 검토 의견을 IEC 60204-1 표준에 근거하여 작성해주세요. 항목 내용: {title}",
-            "priority": 1,
-            "last_updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        },
-        {
-            "prompt_name": "General_Review",
-            "type": ["remark"],
-            "template": "{clause} 항목의 '{title}'에 대한 검토 의견을 전문가 관점에서 작성해주세요.",
-            "priority": 2,
-            "last_updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        },
-        {
-            "prompt_name": "Technical_Assistant",
-            "type": ["chat"], 
-            "template": "당신은 기술 문서 검토를 돕는 전문 AI 어시스턴트입니다. 사용자의 질문에 명확하고 정확하게 답변해 주세요.",
-            "priority": 3,
-            "last_updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-    ]
-    
-    for prompt in default_prompts:
-        filename = os.path.join("prompts", f"{prompt['prompt_name']}.json")
-        if not os.path.exists(filename):
-            with open(filename, "w", encoding="utf-8") as f:
-                json.dump(prompt, f, ensure_ascii=False, indent=2)
+    default_prompt_file = os.path.join("prompts", "General_Review.json")
+    if not os.path.exists(default_prompt_file):
+        try:
+            with open(default_prompt_file, "w", encoding="utf-8") as f:
+                f.write('''{
+  "prompt_name": "General_Review",
+  "type": ["remark"],
+  "template": "항목 {clause}에 대한 검토 의견을 작성해주세요. 해당 항목은 \\\"{title}\\\"에 관한 것입니다.",
+  "priority": 1,
+  "metadata": {
+    "name": "일반 검토",
+    "description": "기본적인 검토 의견 생성 프롬프트입니다.",
+    "author": "system",
+    "created": "2023-12-01"
+  }
+}''')
+            print(f"기본 프롬프트 파일 생성: {default_prompt_file}")
+        except Exception as e:
+            print(f"기본 프롬프트 파일 생성 실패: {e}")
+    else:
+        print(f"기본 프롬프트 파일이 이미 존재합니다: {default_prompt_file}")
 
 def main():
     # 파이썬 버전 체크
@@ -85,13 +73,13 @@ def main():
         # GUI 초기화
         try:
             # 먼저 UI 설정 모듈 임포트
-            from ui.gui_main import create_gui
+            from ui.gui_main import create_main_window
             
-            # GUI 생성
-            app = create_gui()
+            # GUI 생성 - 프로그램 실행에 가장 중요한 부분
+            app = create_main_window()
             if app is None:
                 raise RuntimeError("❌ GUI 초기화 실패")
-                
+            
             # 애플리케이션 실행
             print(f"[INFO] GUI 초기화 완료, 애플리케이션 실행 시작")
             app.mainloop()

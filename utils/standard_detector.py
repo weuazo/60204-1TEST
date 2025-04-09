@@ -239,3 +239,40 @@ def enhance_detection_with_ai(file_path, text_content):
         print(f"AI 규격 감지 중 오류: {e}")
         
     return "UNKNOWN", 0
+
+def get_all_standards():
+    """
+    모든 규격 정보 반환
+    
+    Returns:
+        dict: 모든 규격 정보
+    """
+    standards = {}
+    
+    # 기본 규격 정보 가져오기
+    for std_id in ["IEC_60204-1", "IEC_61010", "ISO_13849", "IEC_62061", "ISO_14119", "IEC_60335"]:
+        standards[std_id] = get_standard_info(std_id)
+    
+    # 사용자 추가 규격 정보 로드 (향후 기능)
+    # TODO: 사용자 정의 규격 로드 기능 추가
+    
+    return standards
+
+def update_standard_info(standard_id, new_info):
+    """
+    규격 정보 업데이트 (향후 확장용)
+    
+    Args:
+        standard_id: 규격 ID
+        new_info: 업데이트할 정보 딕셔너리
+    
+    Returns:
+        bool: 성공 여부
+    """
+    try:
+        # 현재는 메모리에만 저장됨
+        # TODO: 향후 지속적으로 저장하는 기능 추가
+        return True
+    except Exception as e:
+        print(f"규격 정보 업데이트 중 오류: {e}")
+        return False
