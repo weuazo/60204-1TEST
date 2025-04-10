@@ -1,6 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
-import webbrowser
+from tkinter import ttk, messagebox
 import os
 import sys
 import traceback
@@ -9,24 +8,30 @@ import traceback
 from ui.ui_utils import (
     set_root, set_log_box, log_message, show_api_key_dialog, update_all_prompt_statuses, update_api_status,
     PRIMARY_COLOR, SECONDARY_COLOR, BG_COLOR, CARD_COLOR, TEXT_COLOR, 
-    SUCCESS_COLOR, WARNING_COLOR, ERROR_COLOR, BORDER_COLOR, HOVER_COLOR
+    BORDER_COLOR, HOVER_COLOR
 )
+
+# Update imports to use the consolidated report_tab module
+from ui.report_tab import create_extended_report_tab as create_report_tab
+from ui.chat_tab import create_chat_tab
+from ui.prompt_tab import build_prompt_tab
+from ui.gui_helpers import create_api_tab
 
 # 전역 변수
 root = None
 notebook = None
 
-# 콜백 시스템 추가 (새로 추가)
+# 콜백 시스템
 callback_registry = {}
 
-def register_callback(name, callback_fn):
-    """콜백 함수 등록 (새로 추가)"""
+def register_callback(name: str, callback_fn) -> None:
+    """콜백 함수 등록"""
     global callback_registry
     callback_registry[name] = callback_fn
     log_message(f"콜백 등록됨: {name}", "debug")
 
-def trigger_callback(name, *args, **kwargs):
-    """등록된 콜백 함수 호출 (새로 추가)"""
+def trigger_callback(name: str, *args, **kwargs):
+    """등록된 콜백 함수 호출"""
     global callback_registry
     if name in callback_registry:
         try:
@@ -36,7 +41,7 @@ def trigger_callback(name, *args, **kwargs):
             return None
     return None
 
-def on_close():
+def on_close() -> None:
     """애플리케이션 종료 처리"""
     global root
     if messagebox.askokcancel("종료 확인", "프로그램을 종료하시겠습니까?"):
@@ -198,170 +203,120 @@ def check_api_key():
         # API 연결 상태 업데이트
         update_api_status()
 
-def create_main_window():
-    """메인 창 생성"""
+def create_menu_bar(root, app_context):
+    """상단 메뉴바 생성"""
+    menu_bar = tk.Menu(root)
+
+    # File 메뉴
+    file_menu = tk.Menu(menu_bar, tearoff=0)
+    file_menu.add_command(label="Exit", command=root.quit)
+    menu_bar.add_cascade(label="File", menu=file_menu)
+
+    # API 메뉴
+    api_menu = tk.Menu(menu_bar, tearoff=0)
+
+    def open_api_settings():
+        api_window = tk.Toplevel(root)
+        api_window.title("API Settings")
+        api_window.geometry("400x200")
+
+        ttk.Label(api_window, text="API Key:").pack(anchor="w", padx=10, pady=5)
+        api_key_entry = ttk.Entry(api_window, show="*", width=40)
+        api_key_entry.pack(padx=10, pady=5)
+
+        def save_api_key():
+            api_key = api_key_entry.get()
+            if api_key:
+                print(f"API Key saved: {api_key}")
+                ttk.Label(api_window, text="API Key saved successfully!", foreground="green").pack(pady=5)
+            else:
+                ttk.Label(api_window, text="Please enter a valid API Key.", foreground="red").pack(pady=5)
+
+        ttk.Button(api_window, text="Save API Key", command=save_api_key).pack(pady=10)
+
+    api_menu.add_command(label="API Settings", command=open_api_settings)
+    menu_bar.add_cascade(label="API", menu=api_menu)
+
+    # Help 메뉴
+    help_menu = tk.Menu(menu_bar, tearoff=0)
+    help_menu.add_command(label="About", command=lambda: messagebox.showinfo("About", "Gemini Report Generator v0.1.5"))
+    menu_bar.add_cascade(label="Help", menu=help_menu)
+
+    root.config(menu=menu_bar)
+
+def create_main_window(app_context=None):
+    """
+    메인 창 생성
+    
+    Args:
+        app_context: 애플리케이션 컨텍스트 객체
+    
+    Returns:
+        tk.Tk: 생성된 루트 윈도우
+    """
     global root, notebook, log_box, close_window, status_bar
-    
-    # 루트 윈도우 설정
-    root = tk.Tk()
-    root.title("Gemini 보고서 생성기")
-    
-    # 화면 크기 조정: 사용자 화면 크기에 맞게 설정
-    screen_width = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
-    
-    # 화면 크기의 80%로 창 크기 설정 (90%에서 80%로 줄임)
-    window_width = int(screen_width * 0.8)
-    window_height = int(screen_height * 0.8)
-    
-    # 창 위치 계산 (화면 중앙)
-    x = (screen_width - window_width) // 2
-    y = (screen_height - window_height) // 2
-    
-    # 창 크기와 위치 설정
-    root.geometry(f"{window_width}x{window_height}+{x}+{y}")
-    root.minsize(800, 600)  # 최소 창 크기 감소 (1000, 700에서 조정)
-    
-    # 창 닫기 핸들러 등록
-    root.protocol("WM_DELETE_WINDOW", on_close)
-    
-    # 스타일 설정
-    apply_theme()
-    
-    # 헤더 영역 추가 (API 상태 표시 및 설정 버튼)
-    header_frame = ttk.Frame(root)
-    header_frame.pack(fill=tk.X, padx=10, pady=5)
-    
-    # API 키 상태 및 설정 버튼
-    api_frame = ttk.Frame(header_frame)
-    api_frame.pack(side=tk.RIGHT)
-    
-    # API 상태 표시
-    api_status_text = "API 연결 안됨 ⚠️"
-    if os.environ.get("GEMINI_API_KEY"):
-        api_status_text = "API 연결됨 ✓"
-    
-    api_status_label = ttk.Label(
-        api_frame, 
-        text=api_status_text,
-        padding=(5, 0)
-    )
-    api_status_label.pack(side=tk.LEFT, padx=5)
-    
-    # API 키 설정 버튼
-    api_key_btn = ttk.Button(
-        api_frame,
-        text="API 키 설정",
-        command=show_api_key_dialog,
-        width=12
-    )
-    api_key_btn.pack(side=tk.LEFT, padx=5)
-    
-    # 메인 프레임 설정
-    main_frame = ttk.Frame(root)
-    main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-    
-    # 탭 구성 - 개선된 스타일 적용
-    notebook = ttk.Notebook(main_frame)
-    notebook.pack(fill=tk.BOTH, expand=True)
-    
-    # 탭 생성 시 스타일 적용
-    style = ttk.Style()
-    style.configure("Active.TFrame", background=BG_COLOR)
-    style.configure("Disabled.TFrame", background="#f0f0f0")
-    style.configure("Tab.TLabel", font=("Arial", 10, "bold"), padding=5)
-    
-    # 확장 보고서 생성 탭 (새로운 디자인으로 강화)
-    advanced_tab = ttk.Frame(notebook, style="Active.TFrame")
-    from ui.extended_report_tab import create_extended_report_tab
-    create_extended_report_tab(advanced_tab)
-    notebook.add(advanced_tab, text="✨ 확장 보고서 생성")
-    
-    # 기본 보고서 생성 탭 (기존 기능, 명확하게 비활성화 표시)
-    basic_tab = ttk.Frame(notebook, style="Disabled.TFrame")
-    from ui.report_tab import create_report_tab
-    create_report_tab(basic_tab)
-    notebook.add(basic_tab, text="📄 기본 보고서 (비활성화됨)")
-    
-    # AI 채팅 탭
-    chat_tab = ttk.Frame(notebook)
-    from ui.chat_tab import create_chat_tab
-    create_chat_tab(chat_tab)
-    notebook.add(chat_tab, text="💬 AI 채팅")
-    
-    # 프롬프트 관리 탭
-    prompt_tab = ttk.Frame(notebook)
-    from ui.prompt_tab import build_prompt_tab  # create_prompt_tab에서 build_prompt_tab으로 수정
-    build_prompt_tab(prompt_tab)
-    notebook.add(prompt_tab, text="⚙️ 프롬프트 관리")
-    
-    # 도움말 탭
-    help_tab = ttk.Frame(notebook)
-    create_help_tab(help_tab)
-    notebook.add(help_tab, text="❓ 도움말")
-    
-    # 사용자 피드백을 위한 탭 변경 이벤트 연결
-    notebook.bind("<<NotebookTabChanged>>", on_tab_changed)
-    
-    # 로그 영역 높이 줄이기
-    log_frame = ttk.Frame(main_frame)
-    log_frame.pack(fill=tk.X, pady=5)
-    
-    # 로그 영역
-    log_inner_frame = ttk.LabelFrame(log_frame, text="로그 및 상태 메시지")
-    log_inner_frame.pack(fill=tk.X)
-    
-    log_box = scrolledtext.ScrolledText(
-        log_inner_frame, wrap=tk.WORD, height=3, width=10,  # 높이 4에서 3으로 줄임
-        state="disabled", background="#f8f8f8"
-    )
-    log_box.pack(fill=tk.X, padx=5, pady=5)
-    
-    # Gemini API 키 설정 버튼
-    config_frame = ttk.Frame(main_frame)
-    config_frame.pack(fill=tk.X, pady=5)
-    
-    ttk.Button(
-        config_frame,
-        text="API 키 설정",
-        command=show_api_key_dialog,
-        width=15
-    ).pack(side=tk.LEFT, padx=5)
-    
-    # 버전 정보
-    version_label = ttk.Label(config_frame, text="v2.0", foreground="#999999")
-    version_label.pack(side=tk.RIGHT, padx=5)
-    
-    # 상태바
-    status_bar = ttk.Label(
-        root, text="준비됨", relief=tk.SUNKEN, anchor=tk.W, padding=(5, 2)
-    )
-    status_bar.pack(side=tk.BOTTOM, fill=tk.X)
-    
-    # 로그 박스 참조 저장
-    set_log_box(log_box)
-    
-    # 루트 참조 저장 (대화 상자 제어용)
-    set_root(root)
-    
-    # 초기 데이터 로드
-    load_data()
-    
-    # 시작 로그
-    log_message("프로그램이 시작되었습니다", "info")
-    log_message("확장 보고서 생성 탭이 활성화되었습니다", "info")
-    
-    # 초기 API 키 확인
-    check_api_key()
-    
-    return root
+
+    log_message("Starting create_main_window function.", "debug")
+
+    try:
+        log_message("Initializing root window.", "debug")
+        root = tk.Tk()
+        root.title("Gemini 보고서 생성기")
+
+        if app_context:
+            log_message("App context is provided.", "debug")
+            app_context.set_ui_root(root)
+        else:
+            log_message("App context is missing.", "warning")
+
+        log_message("Applying theme.", "debug")
+        apply_theme()
+
+        log_message("Creating menu bar.", "debug")
+        create_menu_bar(root, app_context)
+
+        log_message("Creating main frame and tabs.", "debug")
+        main_frame = ttk.Frame(root)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill=tk.BOTH, expand=True)
+
+        log_message("Adding tabs to the notebook.", "debug")
+
+        # Advanced Report Tab
+        advanced_tab = ttk.Frame(notebook)
+        create_report_tab(advanced_tab, app_context)
+        notebook.add(advanced_tab, text="✨ 확장 보고서 생성")
+
+        # AI Chat Tab
+        chat_tab = ttk.Frame(notebook)
+        create_chat_tab(chat_tab)
+        notebook.add(chat_tab, text="💬 AI 채팅")
+
+        # Prompt Management Tab
+        prompt_tab = ttk.Frame(notebook)
+        build_prompt_tab(prompt_tab)
+        notebook.add(prompt_tab, text="📋 프롬프트 관리")
+
+        # Help Tab
+        help_tab = ttk.Frame(notebook)
+        create_help_tab(help_tab)
+        notebook.add(help_tab, text="❓ 도움말")
+
+        log_message("All tabs added successfully.", "debug")
+        return root
+
+    except Exception as e:
+        log_message(f"Error in create_main_window: {e}", "error")
+        traceback.print_exc()
+        return None
 
 def on_tab_changed(event):
     """탭 변경 시 발생하는 이벤트 핸들러"""
     try:
         # 현재 선택된 탭 확인
         current_tab = event.widget.select()
-        tab_index = event.widget.index(current_tab)
         
         # 각 탭별로 필요한 처리 (보고서 탭에 대한 특별 처리 삭제)
         pass
@@ -386,7 +341,6 @@ def force_recreate_report_tab():
                 widget.destroy()
             
             # 보고서 탭 재생성
-            from ui.report_tab import create_report_tab
             create_report_tab(tab_frame)
             
             # UI 강제 업데이트
@@ -424,18 +378,11 @@ def init_tabs():
         try:
             # 1. 보고서 생성 탭 - 간단한 초기화만 수행
             log_message("보고서 생성 탭 초기화 시작", "info")
-            from ui.report_tab import create_report_tab
-            
-            # 기존 위젯들 모두 제거
-            for widget in tab_frames[0].winfo_children():
-                widget.destroy()
-                
-            # 보고서 탭 생성 (비활성화 메시지)
             create_report_tab(tab_frames[0])
             log_message("보고서 생성 탭 초기화 완료", "info")
         except Exception as e:
             log_message(f"보고서 탭 초기화 오류: {e}", "error")
-            ttk.Label(tab_frames[0], text=f"보고서 탭 기능이 비활성화되었습니다: {e}", foreground=WARNING_COLOR).pack(pady=20)
+            ttk.Label(tab_frames[0], text=f"보고서 탭 기능이 비활성화되었습니다: {e}", foreground=BORDER_COLOR).pack(pady=20)
             
         try:
             # 2. 채팅 탭

@@ -104,25 +104,15 @@ def create_chat_tab(parent):
     )
     show_context_btn.pack(side=tk.LEFT, padx=(5, 0))
     
-    # 프롬프트 설정 영역 (변경됨)
+    # 프롬프트 설정 영역
     prompt_frame = ttk.Frame(control_frame)
     prompt_frame.pack(side=tk.RIGHT)
-    
-    # 자동 적용된 프롬프트 표시
-    selected_prompts_var = tk.StringVar(value="자동 적용중: 없음")
-    selected_prompts_label = ttk.Label(
-        prompt_frame,
-        textvariable=selected_prompts_var,
-        font=("Arial", 9),
-        foreground=SUCCESS_COLOR
-    )
-    selected_prompts_label.pack(side=tk.LEFT, padx=(0, 10))
     
     # 프롬프트 관리 버튼
     manage_prompts_btn = ttk.Button(
         prompt_frame,
         text="프롬프트 관리",
-        command=lambda: open_prompt_tab(),
+        command=show_active_prompts_popup,
         width=12
     )
     manage_prompts_btn.pack(side=tk.RIGHT)
@@ -151,14 +141,14 @@ def create_chat_tab(parent):
     entry_box.bind("<FocusOut>", lambda e: restore_placeholder(entry_box, "여기에 질문을 입력하세요..."))
     
     # 엔터 키 바인딩
-    entry_box.bind("<Return>", lambda e: handle_enter_key(e, entry_box, chat_display, selected_prompts_var))
+    entry_box.bind("<Return>", lambda e: handle_enter_key(e, entry_box, chat_display))
     entry_box.bind("<Shift-Return>", lambda e: None)  # Shift+Enter는 줄바꿈만
     
     # 전송 버튼
     send_btn = ttk.Button(
         entry_frame,
         text="전송",
-        command=lambda: handle_chat_input(entry_box, chat_display, selected_prompts_var),
+        command=lambda: handle_chat_input(entry_box, chat_display),
         width=8
     )
     send_btn.pack(side=tk.RIGHT, padx=(10, 0))
@@ -190,9 +180,6 @@ def create_chat_tab(parent):
     
     # 주기적으로 컨텍스트 상태 업데이트
     update_context_periodically(context_status)
-    
-    # 자동으로 선택된 프롬프트 상태 업데이트
-    update_selected_prompts(selected_prompts_var)
     
     return main_frame
 
@@ -280,7 +267,7 @@ def show_context_in_chat(chat_display):
     chat_display.config(state=tk.DISABLED)
     chat_display.see(tk.END)
 
-def handle_chat_input(entry_box, chat_display, selected_prompts_var=None):
+def handle_chat_input(entry_box, chat_display):
     """채팅 입력 처리"""
     # 사용자 입력 가져오기
     user_input = entry_box.get("1.0", tk.END).strip()
@@ -304,24 +291,18 @@ def handle_chat_input(entry_box, chat_display, selected_prompts_var=None):
     chat_display.see(tk.END)
     chat_display.config(state=tk.DISABLED)
     
-    # 자동으로 적용된 프롬프트 가져오기
-    selected_prompts = get_auto_selected_prompts()
-    
     # 백그라운드에서 AI 응답 생성
     threading.Thread(
         target=generate_ai_response,
-        args=(user_input, chat_display, selected_prompts),
+        args=(user_input, chat_display),
         daemon=True
     ).start()
 
-def generate_ai_response(user_input, chat_display, selected_prompts=None):
+def generate_ai_response(user_input, chat_display):
     """백그라운드에서 AI 응답 생성"""
     try:
         # API 호출
-        if selected_prompts:
-            response = call_gemini_with_prompts(user_input, selected_prompts)
-        else:
-            response = call_gemini_with_prompts(user_input, [])
+        response = call_gemini_with_prompts(user_input, [])
         
         # 응답이 없는 경우 처리
         if not response or not response.strip():
@@ -386,7 +367,7 @@ def reset_chat(chat_display):
         show_welcome_message(chat_display)
         log_message("채팅 내용이 초기화되었습니다.", "info")
 
-def select_chat_prompts(selected_prompts_var):
+def select_chat_prompts():
     """채팅용 프롬프트 선택 대화상자 표시"""
     # 프롬프트 선택 대화상자 표시
     selected = show_active_prompts("chat")
@@ -395,17 +376,17 @@ def select_chat_prompts(selected_prompts_var):
     if selected:
         prompt_names = [p["name"] for p in selected]
         if prompt_names:
-            selected_prompts_var.set(f"선택된 프롬프트: {', '.join(prompt_names)}")
+            print(f"선택된 프롬프트: {', '.join(prompt_names)}")
         else:
-            selected_prompts_var.set("선택된 프롬프트: 없음")
+            print("선택된 프롬프트: 없음")
     else:
-        selected_prompts_var.set("선택된 프롬프트: 없음")
+        print("선택된 프롬프트: 없음")
 
-def handle_enter_key(event, entry_box, chat_display, selected_prompts_var):
+def handle_enter_key(event, entry_box, chat_display):
     """엔터 키 처리"""
     # Shift+Enter가 아닌 경우에만 전송
     if not event.state & 0x1:  # Shift 키가 눌리지 않은 경우
-        handle_chat_input(entry_box, chat_display, selected_prompts_var)
+        handle_chat_input(entry_box, chat_display)
         return "break"  # 이벤트 전파 방지
 
 def clear_placeholder(entry_box, placeholder):
@@ -465,72 +446,54 @@ def update_context_periodically(status_label):
     if root:
         root.after(1000, lambda: update_context_periodically(status_label))
 
-def get_auto_selected_prompts():
-    """프롬프트 관리 탭에서 채팅용으로 체크된 프롬프트 자동 가져오기"""
-    selected_prompts = []
-    
-    try:
-        # 프롬프트 폴더 확인
-        if not os.path.exists("prompts"):
-            return []
-        
-        # 프롬프트 파일 로드 및 채팅용 필터링
-        for file in os.listdir("prompts"):
-            if not file.endswith(".json"):
-                continue
-                
-            try:
-                with open(os.path.join("prompts", file), "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    
-                    # types 필드가 배열인지 확인 (하위 호환성)
-                    types = data.get("type", [])
-                    if not isinstance(types, list):
-                        types = [types]
-                    
-                    # 채팅용 프롬프트인지 확인
-                    if "chat" in types:
-                        prompt_name = data.get("prompt_name", file[:-5])
-                        selected_prompts.append({
-                            "name": prompt_name,
-                            "template": data.get("template", ""),
-                            "priority": data.get("priority", 10)
-                        })
-            except:
-                # 오류 파일 무시
-                pass
-        
-        # 우선순위로 정렬 (낮은 번호가 먼저)
-        selected_prompts.sort(key=lambda x: x.get("priority", 10))
-        
-    except Exception as e:
-        print(f"프롬프트 로드 중 오류: {e}")
-    
-    return selected_prompts
-
-def update_selected_prompts(selected_prompts_var):
-    """자동 적용된 프롬프트 상태 표시 업데이트"""
-    try:
-        prompts = get_auto_selected_prompts()
-        
-        if prompts:
-            # 이름만 추출하여 문자열로 결합
-            names = [p["name"] for p in prompts]
-            selected_prompts_var.set(f"자동 적용중: {', '.join(names)}")
-        else:
-            selected_prompts_var.set("자동 적용중: 없음")
-            
-        # 주기적으로 업데이트 (5초마다)
-        from ui.gui_main import get_root
-        root = get_root()
-        if root:
-            root.after(5000, lambda: update_selected_prompts(selected_prompts_var))
-            
-    except Exception as e:
-        print(f"프롬프트 상태 업데이트 오류: {e}")
-
 def open_prompt_tab():
     """프롬프트 관리 탭으로 이동"""
     # 프롬프트 탭으로 포커스 이동
     from ui.ui_utils import select_prompt_tab
     select_prompt_tab()
+
+def update_chat_prompts(prompt_data):
+    """Update the AI Chat tab with the given prompt data."""
+    try:
+        # Assuming there is a global or accessible variable `chat_prompt_list`
+        # that holds the prompts for the AI Chat tab.
+        global chat_prompt_list
+
+        if not isinstance(chat_prompt_list, list):
+            chat_prompt_list = []
+
+        # Update the chat prompt list with the new prompt
+        chat_prompt_list.append(prompt_data)
+
+        # Log the update
+        print(f"Chat prompts updated: {prompt_data}")
+
+    except Exception as e:
+        print(f"Failed to update chat prompts: {e}")
+
+def show_active_prompts_popup():
+    """현재 적용 중인 프롬프트를 팝업창으로 표시"""
+    from utils.prompt_loader import load_prompts_by_type
+
+    # 채팅 프롬프트 로드
+    prompts_data = load_prompts_by_type("chat", as_dict=True)
+
+    # 팝업창 생성
+    popup = tk.Toplevel()
+    popup.title("현재 적용 중인 프롬프트")
+    popup.geometry("400x300")
+
+    # 프롬프트 목록 표시
+    frame = ttk.Frame(popup, padding=10)
+    frame.pack(fill=tk.BOTH, expand=True)
+
+    ttk.Label(frame, text="현재 적용 중인 프롬프트:", font=("Arial", 12, "bold")).pack(anchor="w", pady=(0, 10))
+
+    if not prompts_data:
+        ttk.Label(frame, text="적용된 프롬프트가 없습니다.", foreground="red").pack(anchor="w")
+    else:
+        for prompt_name in prompts_data.keys():
+            ttk.Label(frame, text=f"- {prompt_name}").pack(anchor="w")
+
+    # 닫기 버튼
+    ttk.Button(frame, text="닫기", command=popup.destroy).pack(pady=(10, 0))

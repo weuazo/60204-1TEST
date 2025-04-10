@@ -65,38 +65,37 @@ class BasicMatcher(DocumentMatcher):
             return self._flexible_match(source_value, target_df, target_col)
     
     def _flexible_match(self, source_value, target_df, target_col):
-        """유연한 매칭 알고리즘"""
-        # 1. 정확한 일치 검색
-        exact_matches = target_df[target_df[target_col].astype(str).str.strip() == source_value]
+        """
+        Optimized flexible matching algorithm.
+        """
+        # Normalize source value
+        normalized_source = self._normalize_clause_id(source_value)
+
+        # Precompute normalized target values
+        target_df["_normalized"] = target_df[target_col].astype(str).apply(self._normalize_clause_id)
+
+        # 1. Exact match on normalized values
+        exact_matches = target_df[target_df["_normalized"] == normalized_source]
         if not exact_matches.empty:
             return exact_matches.index[0]
-        
-        # 2. 항목 번호 정규화
-        normalized_source = self._normalize_clause_id(source_value)
-        target_normalized = target_df[target_col].astype(str).apply(self._normalize_clause_id)
-        
-        # 정규화된 항목으로 정확히 일치하는 항목 검색
-        normalized_matches = target_df[target_normalized == normalized_source]
-        if not normalized_matches.empty:
-            return normalized_matches.index[0]
-        
-        # 3. 접두어 매칭 (예: "8.2.1"은 "8.2"로 시작하는 항목과 매칭 가능)
+
+        # 2. Prefix match (e.g., "8.2.1" matches "8.2")
         if "." in normalized_source:
             prefix = normalized_source.rsplit(".", 1)[0]
-            prefix_matches = target_df[target_normalized.str.startswith(prefix)]
+            prefix_matches = target_df[target_df["_normalized"].str.startswith(prefix)]
             if not prefix_matches.empty:
                 return prefix_matches.index[0]
-        
-        # 4. 가장 유사한 항목 찾기
-        if len(source_value) > 2:  # 최소한 의미있는 길이여야 함
-            similarities = target_normalized.apply(
+
+        # 3. Similarity-based match
+        if len(normalized_source) > 2:  # Ensure meaningful length
+            similarities = target_df["_normalized"].apply(
                 lambda x: self._calculate_similarity(normalized_source, x) if isinstance(x, str) else 0
             )
-            if similarities.max() > 0.7:  # 70% 이상 유사하면 매칭
+            if similarities.max() > 0.7:  # Threshold for similarity
                 return similarities.idxmax()
-        
+
         return None
-    
+
     def _normalize_clause_id(self, clause_id):
         """항목 ID 정규화"""
         if not isinstance(clause_id, str):
@@ -109,15 +108,8 @@ class BasicMatcher(DocumentMatcher):
         return clause_id
     
     def _calculate_similarity(self, str1, str2):
-        """두 문자열 간의 유사도 계산"""
-        if not str1 or not str2:
-            return 0
-        
-        # 최장 공통 접두어 길이
-        i = 0
-        min_len = min(len(str1), len(str2))
-        while i < min_len and str1[i] == str2[i]:
-            i += 1
-        
-        # 유사도 계산 (공통 접두어 비율)
-        return i / max(len(str1), len(str2))
+        """
+        Optimized similarity calculation using Levenshtein distance.
+        """
+        from difflib import SequenceMatcher
+        return SequenceMatcher(None, str1, str2).ratio()

@@ -118,3 +118,30 @@ def check_tab_after_delay(root, notebook):
         logger.info("지연 후 탭 확인 완료")
     except Exception as e:
         logger.error(f"지연 후 탭 확인 중 오류: {e}")
+
+def create_api_tab(parent):
+    """Create the API management tab UI."""
+    frame = ttk.Frame(parent)
+    frame.pack(fill=tk.BOTH, expand=True)
+
+    # Title
+    ttk.Label(frame, text="API Management", font=("Arial", 14)).pack(pady=10)
+
+    # API Key Input
+    ttk.Label(frame, text="API Key:").pack(anchor="w", padx=10, pady=5)
+    api_key_entry = ttk.Entry(frame, show="*", width=40)
+    api_key_entry.pack(padx=10, pady=5)
+
+    # Save Button
+    def save_api_key():
+        api_key = api_key_entry.get()
+        if api_key:
+            # Save the API key (placeholder logic)
+            print(f"API Key saved: {api_key}")
+            ttk.Label(frame, text="API Key saved successfully!", foreground="green").pack(pady=5)
+        else:
+            ttk.Label(frame, text="Please enter a valid API Key.", foreground="red").pack(pady=5)
+
+    ttk.Button(frame, text="Save API Key", command=save_api_key).pack(pady=10)
+
+    return frame

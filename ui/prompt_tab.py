@@ -528,20 +528,20 @@ def save_prompt(name, types, content, priority, status_label, last_saved_label):
     if not name:
         messagebox.showwarning("입력 오류", "프롬프트 이름을 입력하세요.")
         return
-        
+
     if not types:
         messagebox.showwarning("입력 오류", "적용 유형을 하나 이상 선택하세요.")
         return
-        
+
     if not content:
         messagebox.showwarning("입력 오류", "프롬프트 내용을 입력하세요.")
         return
-    
+
     try:
         # 저장 디렉토리 확인
         os.makedirs("prompts", exist_ok=True)
-        
-        # 저장할 데이터 구성 ("all" 타입 사용하지 않음)
+
+        # 저장할 데이터 구성
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         prompt_data = {
             "prompt_name": name,
@@ -550,50 +550,35 @@ def save_prompt(name, types, content, priority, status_label, last_saved_label):
             "priority": priority,
             "last_updated": now
         }
-        
+
         # 파일로 저장
         filepath = os.path.join("prompts", f"{name}.json")
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(prompt_data, f, ensure_ascii=False, indent=2)
-            
+
         # 상태 업데이트
         if status_label:
             status_label.config(text=f"저장 성공: {filepath}", foreground=SUCCESS_COLOR)
-            
+
         if last_saved_label:
             last_saved_label.config(text=f"마지막 저장: {now}")
-        
+
         # 현재 선택된 필터 확인
         current_filter = filter_var.get() if filter_var else "all"
-        
-        # 프롬프트 목록 새로고침 (현재 필터 유지)
+
+        # 프롬프트 목록 새로고침
         refresh_prompt_list(current_filter)
-        
-        # 채팅탭과 보고서 생성탭의 콤보박스 새로고침
-        try:
-            # 각 탭의 프롬프트 상태 업데이트 함수 호출
-            from ui.gui_main import get_root
-            
-            root = get_root()
-            if root:
-                root.after(100, update_all_prompt_statuses)
-                
-                # 상태 메시지 표시
-                if status_label:
-                    status_label.config(text=f"저장 성공: {filepath}", foreground=SUCCESS_COLOR)
-                    
-                if last_saved_label:
-                    last_saved_label.config(text=f"마지막 저장: {now}")
-                    
-                # 성공 메시지를 잠시 표시한 후 사라지게 함
-                if status_label:
-                    root.after(3000, lambda: status_label.config(text=""))
-            
-        except Exception as e:
-            print(f"프롬프트 상태 업데이트 실패: {e}")
-        
+
+        # 채팅탭에 적용된 프롬프트 업데이트
+        if "chat" in types:
+            try:
+                from ui.chat_tab import update_chat_prompts
+                update_chat_prompts(prompt_data)
+            except Exception as e:
+                log_message(f"채팅 프롬프트 업데이트 실패: {e}", "error")
+
         return True
-        
+
     except Exception as e:
         if status_label:
             status_label.config(text=f"저장 실패: {str(e)}", foreground=ERROR_COLOR)

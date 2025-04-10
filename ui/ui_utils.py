@@ -4,6 +4,7 @@ import os
 import sys
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from typing import Dict, Any, Optional, Callable, List, Tuple, Union, TypeVar
 
 # UI 테마 및 색상 상수 정의
 PRIMARY_COLOR = "#3498db"
@@ -32,21 +33,47 @@ AI_STATUS_COLORS = {
     "error": "#e74c3c",  # 오류 - 빨간색
 }
 
-# 전역 변수
+# 전역 변수 - 클래스 기반으로 개선 후에는 제거할 예정
 root = None
 log_box = None
 
-def set_root(root_window):
+# 타입 변수 정의
+TkRoot = TypeVar('TkRoot', bound=tk.Tk)
+TkWidget = TypeVar('TkWidget', bound=tk.Widget)
+
+def get_scaled_size(base_width, base_height, scale_factor=0.8):
+    """화면 크기에 맞게 조정된 창 크기를 반환합니다"""
+    # 현재 화면 해상도 확인
+    if root:
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+    else:
+        # 표준 HD 해상도 기본값
+        screen_width = 1920
+        screen_height = 1080
+    
+    # 기본 크기가 화면보다 크면 비율에 맞게 조정
+    width = min(int(screen_width * scale_factor), base_width)
+    height = min(int(screen_height * scale_factor), base_height)
+    
+    # 초고해상도 화면에서는 더 큰 UI가 적절할 수 있음
+    if screen_width > 2560 or screen_height > 1440:
+        width = int(width * 1.2)
+        height = int(height * 1.2)
+    
+    return width, height
+
+def set_root(root_window: tk.Tk) -> None:
     """메인 창 레퍼런스 설정"""
     global root
     root = root_window
 
-def set_log_box(log_text_widget):
+def set_log_box(log_text_widget: scrolledtext.ScrolledText) -> None:
     """로그 박스 레퍼런스 설정"""
     global log_box
     log_box = log_text_widget
 
-def log_message(message, tag=None):
+def log_message(message: str, tag: Optional[str] = None) -> None:
     """로그 메시지 추가"""
     global log_box
     
@@ -64,7 +91,7 @@ def log_message(message, tag=None):
             # 위젯이 이미 소멸되었거나 유효하지 않은 경우
             pass
 
-def create_indicator_label(parent, text="", tooltip=""):
+def create_indicator_label(parent: TkWidget, text: str = "", tooltip: str = "") -> tk.Frame:
     """AI 분석 상태를 표시할 인디케이터 레이블 생성"""
     frame = ttk.Frame(parent)
     
@@ -81,7 +108,7 @@ def create_indicator_label(parent, text="", tooltip=""):
         create_tooltip(frame, tooltip)
     
     # 레이블 상태 업데이트 함수
-    def update_status(status=None, confidence=0, column=""):
+    def update_status(status: Optional[str] = None, confidence: float = 0, column: str = "") -> None:
         """
         인디케이터 상태 업데이트
         status: 'detected', 'manual', 'none'
@@ -111,15 +138,15 @@ def create_indicator_label(parent, text="", tooltip=""):
             text_label.config(text=f"{text} (감지되지 않음)")
     
     # 업데이트 함수를 프레임에 연결하여 외부에서 접근 가능하게 함
-    frame.update_status = update_status
+    frame.update_status = update_status  # type: ignore
     
     return frame
 
-def create_tooltip(widget, text):
+def create_tooltip(widget: TkWidget, text: str) -> None:
     """위젯에 툴팁 추가"""
     tooltip_window = None
     
-    def enter(event=None):
+    def enter(event=None) -> None:
         nonlocal tooltip_window
         x, y, _, _ = widget.bbox("insert")
         x += widget.winfo_rootx() + 25
@@ -133,7 +160,7 @@ def create_tooltip(widget, text):
         label = tk.Label(tooltip_window, text=text, background="#ffffe0", relief="solid", borderwidth=1, padx=5, pady=2)
         label.pack()
     
-    def leave(event=None):
+    def leave(event=None) -> None:
         nonlocal tooltip_window
         if tooltip_window:
             tooltip_window.destroy()
@@ -142,7 +169,50 @@ def create_tooltip(widget, text):
     widget.bind("<Enter>", enter)
     widget.bind("<Leave>", leave)
 
-def show_progress_dialog(title, message, parent=None):
+def get_scaled_size(width_pct: float = 0.8, height_pct: float = 0.8, 
+                   min_width: int = 800, min_height: int = 600) -> Tuple[int, int, int, int]:
+    """화면 크기에 맞게 조정된 창 크기를 반환합니다.
+    
+    Args:
+        width_pct: 화면 너비의 비율 (0.0~1.0)
+        height_pct: 화면 높이의 비율 (0.0~1.0)
+        min_width: 최소 너비
+        min_height: 최소 높이
+        
+    Returns:
+        (width, height, x, y) 튜플: 크기와 위치 정보
+    """
+    if not root:
+        # Tk 객체가 없는 경우 임시 객체 생성해서 화면 정보 얻기
+        temp_root = tk.Tk()
+        screen_width = temp_root.winfo_screenwidth()
+        screen_height = temp_root.winfo_screenheight()
+        temp_root.destroy()
+    else:
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+    
+    # 작업 표시줄, 창 테두리 등을 고려해 약간 줄임
+    effective_height = int(screen_height * 0.92)
+    
+    # 비율에 따라 계산된 크기
+    width = max(min_width, int(screen_width * width_pct))
+    height = max(min_height, int(effective_height * height_pct))
+    
+    # 중앙 위치 계산
+    x = (screen_width - width) // 2
+    y = (effective_height - height) // 4  # 상단에 가깝게 배치
+    
+    return (width, height, x, y)
+
+def position_dialog(dialog: tk.Toplevel, width_pct: float = 0.6, height_pct: float = 0.7, 
+                   min_width: int = 500, min_height: int = 400) -> Tuple[int, int]:
+    """대화상자 크기와 위치를 화면에 맞게 조정합니다."""
+    width, height, x, y = get_scaled_size(width_pct, height_pct, min_width, min_height)
+    dialog.geometry(f"{width}x{height}+{x}+{y}")
+    return width, height
+
+def show_progress_dialog(title: str, message: str, parent: Optional[tk.Widget] = None) -> Optional[tk.Toplevel]:
     """진행 상태 대화 상자 표시 - 개선된 버전"""
     global root
     
@@ -155,7 +225,12 @@ def show_progress_dialog(title, message, parent=None):
     
     progress_window = tk.Toplevel(parent)
     progress_window.title(title)
-    progress_window.geometry("400x180")  # 약간 더 높게
+    
+    # 크기 조정
+    width, height = 400, 180
+    if isinstance(width, (int, float)) and isinstance(height, (int, float)):
+        progress_window.geometry(f"{width}x{height}")
+    
     progress_window.transient(parent)
     progress_window.grab_set()
     
@@ -206,7 +281,7 @@ def show_progress_dialog(title, message, parent=None):
     dots_label.pack(pady=(5, 0))
     
     # 애니메이션 함수
-    def animate_dots():
+    def animate_dots() -> None:
         import time
         dots = [".", "..", "...", "...."]
         i = 0
@@ -225,14 +300,14 @@ def show_progress_dialog(title, message, parent=None):
     animation_thread.start()
     
     # 업데이트 함수 정의
-    def update_message(new_message):
+    def update_message(new_message: str) -> None:
         message_label.config(text=new_message)
         progress_window.update()
     
-    progress_window.update_message = update_message
+    progress_window.update_message = update_message  # type: ignore
     
     # 창 닫기 방지
-    def disable_close():
+    def disable_close() -> None:
         pass
     
     progress_window.protocol("WM_DELETE_WINDOW", disable_close)
@@ -252,7 +327,11 @@ def show_api_key_dialog():
     
     dialog = tk.Toplevel(root)
     dialog.title("API 키 설정")
-    dialog.geometry("500x200")
+    
+    # 크기 자동 조정
+    width, height = get_scaled_size(500, 200)
+    dialog.geometry(f"{width}x{height}")
+    
     dialog.transient(root)
     dialog.grab_set()
     
@@ -473,10 +552,11 @@ def show_active_prompts(prompt_type):
 def select_prompt_tab():
     """프롬프트 관리 탭으로 전환"""
     global root
-    
+
     if not root:
+        print("오류: root 창이 설정되지 않았습니다.")
         return
-        
+
     try:
         # notebook은 전역 변수로 정의되어 있지 않아 찾아야 함
         for widget in root.winfo_children():
@@ -484,9 +564,11 @@ def select_prompt_tab():
                 for child in widget.winfo_children():
                     if isinstance(child, ttk.Notebook):  # notebook 찾기
                         child.select(2)  # 프롬프트 탭(인덱스 2)
+                        print("프롬프트 관리 탭으로 전환되었습니다.")
                         return True
     except Exception as e:
         print(f"탭 전환 중 오류: {e}")
+        messagebox.showerror("오류", f"프롬프트 관리 탭으로 전환하는 중 오류가 발생했습니다: {e}")
     return False
 
 def update_all_prompt_statuses():
@@ -807,3 +889,117 @@ def create_ai_status_indicator(parent, name):
 def create_column_confidence_display(parent, column_type="항목", confidence=0):
     """열 인식 신뢰도를 시각적으로 표시합니다."""
     return ColumnConfidenceBar(parent, column_type, confidence)
+
+def show_dialog_with_auto_size(title, parent=None, width_ratio=0.5, height_ratio=0.6):
+    """자동 크기 조정되는 대화 상자 생성"""
+    global root
+    
+    if parent is None:
+        parent = root
+        
+    if not parent:
+        print("오류: 부모 창이 설정되지 않았습니다.")
+        return None
+        
+    dialog = tk.Toplevel(parent)
+    dialog.title(title)
+    dialog.transient(parent)
+    dialog.grab_set()
+    
+    # 화면 크기 기준으로 자동 크기 설정
+    screen_width = parent.winfo_screenwidth()
+    screen_height = parent.winfo_screenheight()
+    
+    width = int(screen_width * width_ratio)
+    height = int(screen_height * height_ratio)
+    
+    # 위치 계산 (화면 중앙)
+    x = (screen_width - width) // 2
+    y = (screen_height - height) // 2
+    
+    dialog.geometry(f'{width}x{height}+{x}+{y}')
+    
+    # 크기 자동 조정 기능
+    def adjust_size(event=None):
+        required_height = 0
+        for child in dialog.winfo_children():
+            if child.winfo_ismapped():  # 보이는 위젯만 고려
+                required_height += child.winfo_reqheight()
+        
+        # 현재 창 크기
+        current_height = dialog.winfo_height()
+        
+        # 필요한 높이가 현재보다 크고 화면 높이의 80%보다 작으면 조정
+        if required_height > current_height and required_height < screen_height * 0.8:
+            new_height = min(required_height + 50, int(screen_height * 0.8))
+            dialog.geometry(f'{width}x{new_height}+{x}+{y}')
+    
+    # 크기 조정 이벤트에 함수 연결
+    dialog.bind("<Configure>", adjust_size)
+    
+    return dialog
+
+def create_dialog(title, base_width=600, base_height=400, parent=None, modal=True):
+    """자동 크기 조정 및 중앙 정렬된 다이얼로그 창을 생성합니다"""
+    if parent is None and root:
+        parent = root
+    
+    dialog = tk.Toplevel(parent)
+    dialog.title(title)
+    
+    # 크기 자동 조정
+    width, height = get_scaled_size(base_width, base_height, 0.6)
+    dialog.geometry(f"{width}x{height}")
+    
+    if modal:
+        dialog.transient(parent)
+        dialog.grab_set()
+    
+    # 중앙 배치
+    dialog.update_idletasks()
+    x = parent.winfo_rootx() + (parent.winfo_width() - width) // 2
+    y = parent.winfo_rooty() + (parent.winfo_height() - height) // 2
+    dialog.geometry(f"+{x}+{y}")
+    
+    return dialog
+
+def get_scaled_size(width_pct=0.8, height_pct=0.8, min_width=800, min_height=600):
+    """화면 크기에 맞게 조정된 창 크기를 반환합니다.
+    
+    Args:
+        width_pct: 화면 너비의 비율 (0.0~1.0)
+        height_pct: 화면 높이의 비율 (0.0~1.0)
+        min_width: 최소 너비
+        min_height: 최소 높이
+        
+    Returns:
+        (width, height, x, y) 튜플: 크기와 위치 정보
+    """
+    if not root:
+        # Tk 객체가 없는 경우 임시 객체 생성해서 화면 정보 얻기
+        temp_root = tk.Tk()
+        screen_width = temp_root.winfo_screenwidth()
+        screen_height = temp_root.winfo_screenheight()
+        temp_root.destroy()
+    else:
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+    
+    # 작업 표시줄, 창 테두리 등을 고려해 약간 줄임
+    effective_height = int(screen_height * 0.92)
+    
+    # 비율에 따라 계산된 크기
+    width = max(min_width, int(screen_width * width_pct))
+    height = max(min_height, int(effective_height * height_pct))
+    
+    # 중앙 위치 계산
+    x = (screen_width - width) // 2
+    y = (effective_height - height) // 4  # 상단에 가깝게 배치
+    
+    return (width, height, x, y)
+
+def position_dialog(dialog, width_pct=0.6, height_pct=0.7, min_width=500, min_height=400):
+    """대화상자 크기와 위치를 화면에 맞게 조정합니다."""
+    width, height, x, y = get_scaled_size(width_pct, height_pct, min_width, min_height)
+    dialog.geometry(f"{width}x{height}+{x}+{y}")
+    return width, height

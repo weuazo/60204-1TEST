@@ -1,52 +1,104 @@
-# Gemini 보고서 자동 생성기
+# Gemini Report Generator
 
-## 소개
+Gemini Report Generator is a tool for generating intelligent reports using AI. It supports various document formats and provides advanced matching and analysis capabilities.
 
-Gemini 보고서 자동 생성기는 기술 문서 검토 작업을 자동화하는 도구입니다. Google의 Gemini AI를 활용하여, 검토 시트에 있는 항목들에 대한 전문적인 검토 의견을 자동 생성하여 템플릿 엑셀 파일에 기입합니다.
+## Features
+- AI-based document matching
+- Flexible and exact matching modes
+- Automatic standard detection
+- User-friendly UI with theme support
+- Feedback system for user input
 
-## 주요 기능
-
-1. **보고서 자동 생성**
-   - 검토 시트와 템플릿 엑셀 파일을 선택하여 검토 의견을 자동 생성
-   - 항목 번호에 따라 템플릿 파일의 해당 항목에 의견 기입
-
-2. **유연한 항목 매칭**
-   - 정확히 일치하는 항목뿐만 아니라 유사한 항목도 매칭 가능
-   - 예: "8.2"와 "8.2.1" 같이 부분적으로 일치하는 항목도 매칭
-
-3. **규격 자동 감지**
-   - 검토 시트에서 적용된 규격을 자동으로 감지하여 적절한 검토 의견 생성
-   - 지원 규격: IEC 60204-1, IEC 61010, ISO 13849 등
-
-4. **AI 채팅**
-   - AI와 자유롭게 대화하며 기술 문서 관련 질문 가능
-
-5. **프롬프트 관리**
-   - 보고서 생성과 채팅에 적용될 프롬프트 템플릿 관리
-   - 우선순위에 따라 여러 프롬프트 적용 가능
-
-## 시스템 요구사항
-
-- Python 3.6 이상
-- pandas, tkinter, google-generativeai 라이브러리
-- 인터넷 연결 (Gemini API 호출용)
-- Google AI Studio에서 발급받은 Gemini API 키
-
-## 설치 및 실행
-
-1. GitHub 저장소에서 프로젝트를 다운로드 또는 복제합니다.
-2. 필요한 라이브러리를 설치합니다:
+## Installation
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-repo/gemini_report_generator.git
    ```
-   pip install pandas openpyxl google-generativeai python-dotenv
+
+2. Navigate to the project directory:
+   ```bash
+   cd gemini_report_generator/project2
    ```
-3. Google AI Studio에서 API 키를 발급받습니다.
-4. main.py 파일이 있는 디렉토리에서 다음 명령을 실행합니다:
+
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
    ```
+
+4. Run the application:
+   ```bash
    python main.py
    ```
-5. 프로그램 실행 후 "API 키 설정" 버튼을 클릭하여 API 키를 입력합니다.
 
-## 개발 정보
+## Creating an Executable
+To create a standalone executable:
+```bash
+pyinstaller --onefile --name gemini_report main.py
+```
+The executable will be located in the `dist/` directory.
 
-- 버전: 0.1.3
-- 라이선스: MIT
+## Usage
+1. Launch the application.
+2. Use the tabs to navigate between features:
+   - **Report Generation**: Create intelligent reports.
+   - **AI Chat**: Interact with AI for assistance.
+   - **Prompt Management**: Manage prompts for AI interactions.
+   - **Help**: Access user guides and documentation.
+
+## Plugin System
+
+The Gemini Report Generator supports a plugin system to extend its functionality. Plugins are Python scripts located in the `plugins/` directory.
+
+### How to Create a Plugin
+1. Create a new Python file in the `plugins/` directory (e.g., `my_plugin.py`).
+2. Define a `run` function in the file. This function will be executed when the plugin is loaded.
+
+Example:
+```python
+# plugins/my_plugin.py
+def run():
+    print("My custom plugin is running!")
+```
+
+### How to Use Plugins
+1. Place your plugin file in the `plugins/` directory.
+2. Run the application. The plugin loader will automatically detect and load the plugin.
+3. If the plugin has a `run` function, it will be executed.
+
+### Sample Plugin
+A sample plugin (`sample_plugin.py`) is included in the `plugins/` directory. It demonstrates the basic structure of a plugin.
+
+---
+
+## Project Structure
+
+```
+project2/
+├── api/                # API integration modules
+├── data/               # Data files and resources
+├── logic/              # Core logic for report generation
+├── matcher/            # Matching algorithms
+├── parsers/            # File parsers (Excel, PDF, Word)
+├── plugins/            # Plugin directory
+├── prompts/            # Prompt templates for AI
+├── tests/              # Unit tests
+├── ui/                 # User interface modules
+├── utils/              # Utility modules
+├── main.py             # Main entry point
+├── setup.py            # Packaging configuration
+└── README.md           # Project documentation
+```
+
+This structure ensures modularity and ease of maintenance.
+
+## Testing
+Run the test suite to ensure functionality:
+```bash
+python -m unittest discover tests
+```
+
+## Contributing
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+## License
+This project is licensed under the MIT License. See the LICENSE file for details.
