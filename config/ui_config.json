@@ -1,0 +1,39 @@
+{
+  "main_window": {
+    "title": "Gemini Report Generator - Enhanced",
+    "size": {
+      "width": 1000,
+      "height": 700
+    },
+    "min_size": {
+      "width": 800,
+      "height": 600
+    },
+    "center_on_screen": true
+  },
+  "components": {
+    "progress_dialog": {
+      "auto_close": false,
+      "show_memory_usage": true,
+      "update_interval_ms": 500
+    },
+    "file_selector": {
+      "remember_last_directory": true,
+      "validate_on_select": true
+    },
+    "error_display": {
+      "auto_report": false,
+      "show_suggestions": true,
+      "allow_copy": true
+    }
+  },
+  "themes": {
+    "default": {
+      "progress_colors": {
+        "success": "#28a745",
+        "warning": "#ffc107", 
+        "danger": "#dc3545"
+      }
+    }
+  }
+}
